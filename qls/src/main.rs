@@ -3,7 +3,11 @@ use std::fs;
 use std::path::PathBuf;
 
 fn main() {
-    let args: Vec<String> = env::args().skip(1).collect();
+    let mut args: Vec<String> = env::args().skip(1).collect();
+    if args.is_empty() {
+        args.push(".".to_owned());
+    }
+
     for arg in args.iter() {
         let p = PathBuf::from(arg);
         println!("{}:", p.canonicalize().unwrap().display());
