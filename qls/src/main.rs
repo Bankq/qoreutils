@@ -33,7 +33,7 @@ fn main() {
     let dirs = matches
         .get_many::<String>("paths")
         .map(|v| v.map(Path::new).collect())
-        .unwrap_or_else(|| vec![Path::new(".")]);
+        .unwrap_or(vec![Path::new(".")]);
 
     for d in dirs {
         println!("{}:", d.canonicalize().unwrap().display());
