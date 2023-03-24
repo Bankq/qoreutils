@@ -72,7 +72,6 @@ fn main() {
 fn tee(paths: Vec<&Path>, config: &Config) {
     let mut reader = io::stdin();
     let mut writers: Vec<Box<dyn io::Write>> = paths
-        .clone()
         .into_iter()
         .map(|p| {
             let mut file = fs::OpenOptions::new();
@@ -80,7 +79,7 @@ fn tee(paths: Vec<&Path>, config: &Config) {
             if config.append {
                 file.append(true);
             }
-            Box::new(file.open(p.clone()).unwrap()) as Box<dyn io::Write>
+            Box::new(file.open(p).unwrap()) as Box<dyn io::Write>
         })
         .collect();
     writers.push(Box::new(io::stdout()));
