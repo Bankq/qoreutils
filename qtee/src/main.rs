@@ -28,14 +28,18 @@ impl io::Write for TeeWriters {
     // io::Write has two methods: write and flush
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.writers.iter_mut().for_each(|w| {
-            w.write_all(buf);
+            w.write_all(buf).unwrap_or_else(|e| {
+                eprintln!("{e}");
+            })
         });
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
         self.writers.iter_mut().for_each(|w| {
-            w.flush();
+            w.flush().unwrap_or_else(|e| {
+                eprintln!("{e}");
+            });
         });
         Ok(())
     }
@@ -73,17 +77,25 @@ fn tee(paths: Vec<&Path>, config: &Config) {
     let mut reader = io::stdin();
     let mut writers: Vec<Box<dyn io::Write>> = paths
         .into_iter()
-        .map(|p| {
+        .filter_map(|p| {
             let mut file = fs::OpenOptions::new();
             file.create(true);
             if config.append {
                 file.append(true);
             }
-            Box::new(file.open(p).unwrap()) as Box<dyn io::Write>
+            match file.open(p) {
+                Ok(handle) => Some(Box::new(handle) as Box<dyn io::Write>),
+                Err(e) => {
+                    eprintln!("{}: {e}", p.display());
+                    None
+                }
+            }
         })
         .collect();
     writers.push(Box::new(io::stdout()));
 
     let mut tee_writers = TeeWriters { writers };
-    io::copy(&mut reader, &mut tee_writers);
+    if let Err(e) = io::copy(&mut reader, &mut tee_writers) {
+        eprintln!("{e}");
+    };
 }
