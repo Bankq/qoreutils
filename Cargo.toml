@@ -3,4 +3,5 @@
 members = [
          "qls",
          "qtee",
+         "qbase64",
 ]
