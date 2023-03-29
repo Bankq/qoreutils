@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Error, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 const B64TABLE: &'static [char] = &[
@@ -110,8 +110,7 @@ fn decode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
             output.write(&[v as u8])?;
         }
         Ok(())
-    })?;
-    Ok(())
+    })
 }
 
 fn encode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
@@ -119,7 +118,7 @@ fn encode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
     let mut buf = Vec::new();
     input.read_to_end(&mut buf)?;
     let chunks = &buf[..].chunks(3);
-    chunks.to_owned().for_each(|chunk| {
+    chunks.to_owned().try_for_each(|chunk| {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
         for i in 0..l {
@@ -136,10 +135,7 @@ fn encode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
             encoded.push('=' as u8);
         }
 
-        if let Err(e) = output.write(&encoded) {
-            eprintln!("{e}");
-        }
-    });
-
-    Ok(())
+        output.write(&encoded)?;
+        Ok::<(), Error>(())
+    })
 }
