@@ -136,3 +136,24 @@ fn encode(input: &Vec<u8>) -> Result<Vec<u8>> {
     });
     Ok(encoded)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_encode() -> Result<()> {
+        let input = "HELLO".as_bytes().to_vec();
+        let expected = "SEVMTE8=".as_bytes().to_vec();
+        assert_eq!(expected, encode(&input)?);
+        Ok(())
+    }
+
+    #[test]
+    fn test_decode() -> Result<()> {
+        let expected = "HELLO".as_bytes().to_vec();
+        let input = "SEVMTE8=".as_bytes().to_vec();
+        assert_eq!(expected, decode(&input)?);
+        Ok(())
+    }
+}
