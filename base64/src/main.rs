@@ -1,7 +1,7 @@
 use std::fs;
 use std::io;
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 const B64TABLE: &'static [char] = &[
@@ -74,19 +74,20 @@ fn main() {
         .arg(Arg::new("input").short('i').long("input"))
         .arg(Arg::new("output").short('o').long("output"))
         .get_matches();
-    let config = Config::from(&matches);
-
-    match config.mode {
-        Mode::ENCODE => encode(config.input, config.output),
-        Mode::DECODE => decode(config.input, config.output),
+    let mut config = Config::from(&matches);
+    let mut input = Vec::new();
+    config.input.read_to_end(&mut input).unwrap();
+    let output = match config.mode {
+        Mode::ENCODE => encode(&input),
+        Mode::DECODE => decode(&input),
     }
     .unwrap();
+    config.output.write(&output).unwrap();
 }
 
-fn decode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
-    let mut buf = Vec::new();
-    input.read_to_end(&mut buf)?;
-    let chunks = &buf[..].chunks(4);
+fn decode(input: &Vec<u8>) -> Result<Vec<u8>> {
+    let chunks = input[..].chunks(4);
+    let mut decoded = Vec::new();
     chunks.to_owned().try_for_each(|chunk| {
         let mut encoded: u32 = 0;
         let mut pad_count = 0;
@@ -107,35 +108,31 @@ fn decode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
             let shift = 16 - i * 8;
             let mask: u32 = 255 << shift;
             let v = (encoded & mask) >> shift;
-            output.write(&[v as u8])?;
+            decoded.push(v as u8);
         }
         Ok(())
-    })
+    })?;
+    Ok(decoded)
 }
 
-fn encode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
-    let mask: u32 = 63;
-    let mut buf = Vec::new();
-    input.read_to_end(&mut buf)?;
-    let chunks = &buf[..].chunks(3);
-    chunks.to_owned().try_for_each(|chunk| {
+fn encode(input: &Vec<u8>) -> Result<Vec<u8>> {
+    let mut encoded = Vec::new();
+    let chunks = input[..].chunks(3);
+    chunks.to_owned().for_each(|chunk| {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
         for i in 0..l {
             let shift = 16 - i * 8;
             b3 = b3 | (chunk[i] as u32) << shift;
         }
-        let mut encoded = Vec::new();
         for i in 0..=l {
             let shift = 18 - i * 6;
-            let sextet = (b3 & (mask << shift)) >> shift;
+            let sextet = (b3 & (63 << shift)) >> shift;
             encoded.push(B64TABLE[sextet as usize] as u8);
         }
         for _ in l..3 {
             encoded.push('=' as u8);
         }
-
-        output.write(&encoded)?;
-        Ok::<(), Error>(())
-    })
+    });
+    Ok(encoded)
 }
