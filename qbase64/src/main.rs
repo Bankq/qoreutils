@@ -121,11 +121,10 @@ fn encode(mut input: impl io::Read, mut output: impl io::Write) -> Result<()> {
     let chunks = &buf[..].chunks(3);
     chunks.to_owned().for_each(|chunk| {
         let l = chunk.len();
-        let mut shift = 16;
         let mut b3: u32 = 0; // higher 8bits ignored
         for i in 0..l {
+            let shift = 16 - i * 8;
             b3 = b3 | (chunk[i] as u32) << shift;
-            shift -= 8;
         }
         let mut encoded = Vec::new();
         for i in 0..=l {
