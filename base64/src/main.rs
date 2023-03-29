@@ -30,30 +30,21 @@ impl Config {
                 false => Mode::ENCODE,
             },
             input: match options.get_one::<String>("input") {
-                Some(path) => {
-                    let mut file = fs::OpenOptions::new();
-                    file.read(true);
-                    match file.open(path) {
-                        Ok(handle) => Box::new(handle) as Box<dyn io::Read>,
-                        Err(e) => {
-                            panic!("{path}:{e}")
-                        }
+                Some(path) => match fs::OpenOptions::new().read(true).open(path) {
+                    Ok(handle) => Box::new(handle) as Box<dyn io::Read>,
+                    Err(e) => {
+                        panic!("{path}:{e}")
                     }
-                }
+                },
                 None => Box::new(io::stdin()) as Box<dyn io::Read>,
             },
             output: match options.get_one::<String>("output") {
-                Some(path) => {
-                    let mut file = fs::OpenOptions::new();
-                    file.create(true);
-                    file.write(true);
-                    match file.open(path) {
-                        Ok(handle) => Box::new(handle) as Box<dyn io::Write>,
-                        Err(e) => {
-                            panic!("{path}:{e}")
-                        }
+                Some(path) => match fs::OpenOptions::new().create(true).write(true).open(path) {
+                    Ok(handle) => Box::new(handle) as Box<dyn io::Write>,
+                    Err(e) => {
+                        panic!("{path}:{e}")
                     }
-                }
+                },
                 None => Box::new(io::stdout()) as Box<dyn io::Write>,
             },
         }
