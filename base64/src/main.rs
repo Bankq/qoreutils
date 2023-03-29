@@ -62,7 +62,7 @@ impl Config {
 }
 
 fn main() {
-    let matches = Command::new("qbase64")
+    let matches = Command::new("base64")
         .arg(
             Arg::new("decode")
                 .short('d')

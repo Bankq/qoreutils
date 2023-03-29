@@ -18,7 +18,7 @@ impl Config {
 }
 
 fn main() {
-    let cmd = Command::new("qls")
+    let cmd = Command::new("ls")
         .arg(
             Arg::new("include_dot_files")
                 .short('a')

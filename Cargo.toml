@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-         "qls",
-         "qtee",
-         "qbase64",
+         "ls",
+         "tee",
+         "base64",
 ]

@@ -1,10 +1,13 @@
 [package]
-name = "qbase64"
+name = "qoreutils-tee"
 version = "0.1.0"
 edition = "2021"
+
+[[bin]]
+name = "qtee"
+path = "src/main.rs"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0.70"
-clap = "4.1.13"
+clap = "4.1.11"
