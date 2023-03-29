@@ -1,7 +1,6 @@
 use std::fs;
 use std::io;
 
-use anyhow::{anyhow, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 const B64TABLE: &'static [char] = &[
@@ -85,7 +84,7 @@ fn main() {
     config.output.write(&output).unwrap();
 }
 
-fn decode(input: &Vec<u8>) -> Result<Vec<u8>> {
+fn decode(input: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
     let chunks = input[..].chunks(4);
     let mut decoded = Vec::new();
     chunks.to_owned().try_for_each(|chunk| {
@@ -100,7 +99,7 @@ fn decode(input: &Vec<u8>) -> Result<Vec<u8>> {
             if let Some(v) = B64TABLE.iter().position(|&x| (x as u8) == *c) {
                 encoded = encoded | (v << (18 - i * 6)) as u32;
             } else {
-                return Err(anyhow!("invalid input"));
+                return Err("invalid input");
             }
         }
 
@@ -115,7 +114,7 @@ fn decode(input: &Vec<u8>) -> Result<Vec<u8>> {
     Ok(decoded)
 }
 
-fn encode(input: &Vec<u8>) -> Result<Vec<u8>> {
+fn encode(input: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
     let mut encoded = Vec::new();
     let chunks = input[..].chunks(3);
     chunks.to_owned().for_each(|chunk| {
