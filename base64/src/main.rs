@@ -132,7 +132,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_encode() -> Result<()> {
+    fn test_encode() -> Result<(), &'static str> {
         let input = "HELLO".as_bytes().to_vec();
         let expected = "SEVMTE8=".as_bytes().to_vec();
         assert_eq!(expected, encode(&input)?);
@@ -140,7 +140,7 @@ mod tests {
     }
 
     #[test]
-    fn test_decode() -> Result<()> {
+    fn test_decode() -> Result<(), &'static str> {
         let expected = "HELLO".as_bytes().to_vec();
         let input = "SEVMTE8=".as_bytes().to_vec();
         assert_eq!(expected, decode(&input)?);
