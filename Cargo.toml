@@ -4,4 +4,5 @@ members = [
          "ls",
          "tee",
          "base64",
+         "chmod",
 ]
