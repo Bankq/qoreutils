@@ -62,7 +62,7 @@ fn main() {
         .arg(Arg::new("paths").action(ArgAction::Append));
 
     let args: Vec<String> = env::args().skip(1).collect();
-    let matches = cmd.get_matches_from(&args);
+    let matches = cmd.get_matches_from(args);
     let config = Config::from(&matches);
     dbg!(&config);
     let paths = matches
