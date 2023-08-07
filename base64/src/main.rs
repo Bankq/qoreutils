@@ -3,7 +3,7 @@ use std::io;
 
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
-const B64TABLE: &'static [char] = &[
+const B64TABLE: &[char] = &[
     'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
     'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
     'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4',
@@ -12,8 +12,8 @@ const B64TABLE: &'static [char] = &[
 
 #[derive(Debug)]
 enum Mode {
-    ENCODE,
-    DECODE,
+    Encode,
+    Decode,
 }
 
 struct Config {
@@ -26,8 +26,8 @@ impl Config {
     pub fn from(options: &ArgMatches) -> Self {
         Self {
             mode: match options.get_flag("decode") {
-                true => Mode::DECODE,
-                false => Mode::ENCODE,
+                true => Mode::Decode,
+                false => Mode::Encode,
             },
             input: match options.get_one::<String>("input") {
                 Some(path) => match fs::OpenOptions::new().read(true).open(path) {
@@ -68,27 +68,27 @@ fn main() {
     let mut input = Vec::new();
     config.input.read_to_end(&mut input).unwrap();
     let output = match config.mode {
-        Mode::ENCODE => encode(&input),
-        Mode::DECODE => decode(&input),
+        Mode::Encode => encode(&input),
+        Mode::Decode => decode(&input),
     }
     .unwrap();
-    config.output.write(&output).unwrap();
+    config.output.write_all(&output).unwrap();
 }
 
-fn decode(input: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
+fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let chunks = input[..].chunks(4);
     let mut decoded = Vec::new();
     chunks.to_owned().try_for_each(|chunk| {
         let mut encoded: u32 = 0;
         let mut pad_count = 0;
         for (i, c) in chunk.iter().enumerate() {
-            if *c == ('=' as u8) {
+            if *c == b'=' {
                 pad_count += 1;
                 continue;
             }
 
             if let Some(v) = B64TABLE.iter().position(|&x| (x as u8) == *c) {
-                encoded = encoded | (v << (18 - i * 6)) as u32;
+                encoded |= (v << (18 - i * 6)) as u32;
             } else {
                 return Err("invalid input");
             }
@@ -105,24 +105,22 @@ fn decode(input: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
     Ok(decoded)
 }
 
-fn encode(input: &Vec<u8>) -> Result<Vec<u8>, &'static str> {
+fn encode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut encoded = Vec::new();
     let chunks = input[..].chunks(3);
     chunks.to_owned().for_each(|chunk| {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
-        for i in 0..l {
+        for (i, c) in chunk.iter().enumerate().take(l) {
             let shift = 16 - i * 8;
-            b3 = b3 | (chunk[i] as u32) << shift;
+            b3 |= (*c as u32) << shift;
         }
         for i in 0..=l {
             let shift = 18 - i * 6;
             let sextet = (b3 & (63 << shift)) >> shift;
             encoded.push(B64TABLE[sextet as usize] as u8);
         }
-        for _ in l..3 {
-            encoded.push('=' as u8);
-        }
+        encoded.resize(encoded.len() + 3 - l, b'=');
     });
     Ok(encoded)
 }
