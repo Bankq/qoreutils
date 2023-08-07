@@ -41,7 +41,7 @@ fn main() {
             Ok(res) => res.for_each(|f| {
                 let fname = f.unwrap().file_name();
                 let fname = fname.to_str().unwrap();
-                if !fname.starts_with(".") || config.include_dot_files {
+                if !fname.starts_with('.') || config.include_dot_files {
                     println!("{}", fname);
                 }
             }),
