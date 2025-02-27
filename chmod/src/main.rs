@@ -72,29 +72,18 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
             let mut permissions = 0;
 
             // Parse the symbolic mode (e.g. u+rw, g-x, a=r)
-            let mut chars = part.chars();
+            let mut chars = part.chars().peekable();
 
             // Parse who (u, g, o, a)
-            while let Some(c) = chars.clone().next() {
+            while let Some(&c) = chars.peek() {
                 match c {
-                    'u' => {
-                        who |= 0o700;
-                        chars.next();
-                    }
-                    'g' => {
-                        who |= 0o070;
-                        chars.next();
-                    }
-                    'o' => {
-                        who |= 0o007;
-                        chars.next();
-                    }
-                    'a' => {
-                        who |= 0o777;
-                        chars.next();
-                    }
+                    'u' => who |= 0o700,
+                    'g' => who |= 0o070,
+                    'o' => who |= 0o007,
+                    'a' => who |= 0o777,
                     _ => break,
                 }
+                chars.next();
             }
 
             // If no who specified, default to all
