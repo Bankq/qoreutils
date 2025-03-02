@@ -107,21 +107,19 @@ fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
 
 fn encode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut encoded = Vec::new();
-    let chunks = input[..].chunks(3);
-    chunks.for_each(|chunk| {
+    for chunk in input.chunks(3) {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
-        for (i, c) in chunk.iter().enumerate().take(l) {
-            let shift = 16 - i * 8;
-            b3 |= (*c as u32) << shift;
+        for (i, &c) in chunk.iter().enumerate() {
+            b3 |= (c as u32) << 16 - i * 8;
         }
         for i in 0..=l {
             let shift = 18 - i * 6;
-            let sextet = (b3 & (63 << shift)) >> shift;
+            let sextet = (b3 >> shift) & 0x3F;
             encoded.push(B64TABLE[sextet as usize] as u8);
         }
         encoded.resize(encoded.len() + 3 - l, b'=');
-    });
+    }
     Ok(encoded)
 }
 
