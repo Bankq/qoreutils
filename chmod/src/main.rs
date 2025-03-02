@@ -56,14 +56,7 @@ fn main() -> io::Result<()> {
 fn parse_mode(mode_str: &str) -> Result<u32, String> {
     // Check for symbolic mode format
     if mode_str.contains('+') || mode_str.contains('-') || mode_str.contains('=') {
-        let current_mode = if mode_str.contains('=') {
-            // When using '=', we start with a base of 0
-            0
-        } else {
-            // For '+' and '-', we start with a base of current permissions (using a typical default)
-            0o666
-        };
-
+        let current_mode = if mode_str.contains('=') { 0 } else { 0o666 };
         let mut result_mode = current_mode;
 
         // Process each symbolic operation
@@ -87,6 +80,7 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
             }
 
             // If no who specified, default to all
+            // Default to all if no who specified
             if who == 0 {
                 who = 0o777;
             }
@@ -113,10 +107,8 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
                 '+' => result_mode |= permissions,
                 '-' => result_mode &= !permissions,
                 '=' => {
-                    // Clear the bits for specified users
-                    result_mode &= !who;
-                    // Set the new permissions
-                    result_mode |= permissions;
+                    // Clear bits for specified users and set new permissions
+                    result_mode = (result_mode & !who) | permissions;
                 }
                 _ => unreachable!(),
             }
@@ -125,21 +117,20 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
         return Ok(result_mode);
     }
 
+    // Handle octal mode
     if mode_str.starts_with('0') {
-        // Octal mode
         match u32::from_str_radix(&mode_str[1..], 8) {
-            Ok(mode) => Ok(mode),
-            Err(_) => Err(format!("Invalid octal mode: {}", mode_str)),
+            Ok(mode) => return Ok(mode),
+            Err(_) => return Err(format!("Invalid octal mode: {}", mode_str)),
         }
-    } else {
-        // For simplicity, just try to parse as octal without the leading 0
-        match u32::from_str_radix(mode_str, 8) {
-            Ok(mode) => Ok(mode),
-            Err(_) => Err(format!(
-                "Invalid mode: {}. This implementation only supports octal modes.",
-                mode_str
-            )),
-        }
+    }
+
+    match u32::from_str_radix(mode_str, 8) {
+        Ok(mode) => Ok(mode),
+        Err(_) => Err(format!(
+            "Invalid mode: {}. This implementation only supports octal modes.",
+            mode_str
+        )),
     }
 }
 
