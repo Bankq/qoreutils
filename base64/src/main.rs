@@ -108,7 +108,7 @@ fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
 fn encode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
     let mut encoded = Vec::new();
     let chunks = input[..].chunks(3);
-    chunks.to_owned().for_each(|chunk| {
+    chunks.for_each(|chunk| {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
         for (i, c) in chunk.iter().enumerate().take(l) {
