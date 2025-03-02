@@ -76,9 +76,12 @@ fn main() {
 }
 
 fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
-    let chunks = input[..].chunks(4);
-    let mut decoded = Vec::new();
-    chunks.to_owned().try_for_each(|chunk| {
+    if input.len() % 4 != 0 {
+        return Err("Input length is not a multiple of 4");
+    }
+
+    let mut decoded = Vec::with_capacity((input.len() / 4) * 3);
+    for chunk in input.chunks(4) {
         let mut encoded: u32 = 0;
         let mut pad_count = 0;
         for (i, c) in chunk.iter().enumerate() {
@@ -100,8 +103,7 @@ fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
             let v = (encoded & mask) >> shift;
             decoded.push(v as u8);
         }
-        Ok(())
-    })?;
+    }
     Ok(decoded)
 }
 
