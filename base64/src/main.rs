@@ -39,7 +39,12 @@ impl Config {
                 None => Box::new(io::stdin()) as Box<dyn io::Read>,
             },
             output: match options.get_one::<String>("output") {
-                Some(path) => match fs::OpenOptions::new().create(true).write(true).open(path) {
+                Some(path) => match fs::OpenOptions::new()
+                    .create(true)
+                    .write(true)
+                    .truncate(true)
+                    .open(path)
+                {
                     Ok(handle) => Box::new(handle) as Box<dyn io::Write>,
                     Err(e) => {
                         panic!("{path}:{e}")
@@ -113,7 +118,7 @@ fn encode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
         let l = chunk.len();
         let mut b3: u32 = 0; // higher 8bits ignored
         for (i, &c) in chunk.iter().enumerate() {
-            b3 |= (c as u32) << 16 - i * 8;
+            b3 |= (c as u32) << (16 - i * 8);
         }
         for i in 0..=l {
             let shift = 18 - i * 6;

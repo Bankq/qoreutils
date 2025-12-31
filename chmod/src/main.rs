@@ -119,9 +119,11 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
 
     // Handle octal mode
     if mode_str.starts_with('0') {
-        match u32::from_str_radix(&mode_str[1..], 8) {
-            Ok(mode) => return Ok(mode),
-            Err(_) => return Err(format!("Invalid octal mode: {}", mode_str)),
+        if let Some(stripped) = &mode_str.strip_prefix('0') {
+            match u32::from_str_radix(stripped, 8) {
+                Ok(mode) => return Ok(mode),
+                Err(_) => return Err(format!("Invalid octal mode: {}", mode_str)),
+            }
         }
     }
 
