@@ -1,60 +1,58 @@
-use std::env;
-use std::fs;
-use std::io;
+use std::fs::File;
+use std::io::{self, Read, Write};
 use std::path::Path;
 
+use anyhow::{Context, Result};
 use clap::{Arg, ArgAction, ArgMatches, Command};
 
 struct Config {
     append: bool,
-    // ignore_sigint: bool,
-    input: Box<dyn io::Read>,
+    input: Box<dyn Read>,
 }
 
 impl Config {
-    pub fn from(options: &ArgMatches) -> Self {
-        Self {
+    pub fn from(options: &ArgMatches) -> Result<Self> {
+        let input: Box<dyn Read> = match options.get_one::<String>("input") {
+            Some(path) => {
+                let file = File::open(path)
+                    .with_context(|| format!("failed to open input file '{path}'"))?;
+                Box::new(file)
+            }
+            None => Box::new(io::stdin()),
+        };
+
+        Ok(Self {
             append: options.get_flag("append"),
-            // ignore_sigint: options.get_flag("ignore_sigint"),
-            input: match options.get_one::<String>("input") {
-                Some(path) => match fs::OpenOptions::new().read(true).open(path) {
-                    Ok(handle) => Box::new(handle) as Box<dyn io::Read>,
-                    Err(e) => {
-                        panic!("{path}:{e}")
-                    }
-                },
-                None => Box::new(io::stdin()) as Box<dyn io::Read>,
-            },
-        }
+            input,
+        })
     }
 }
 
 struct TeeWriters {
-    writers: Vec<Box<dyn io::Write>>,
+    writers: Vec<Box<dyn Write>>,
 }
 
-impl io::Write for TeeWriters {
-    // io::Write has two methods: write and flush
+impl Write for TeeWriters {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.writers.iter_mut().for_each(|w| {
-            w.write_all(buf).unwrap_or_else(|e| {
+        for writer in &mut self.writers {
+            if let Err(e) = writer.write_all(buf) {
                 eprintln!("{e}");
-            })
-        });
+            }
+        }
         Ok(buf.len())
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        self.writers.iter_mut().for_each(|w| {
-            w.flush().unwrap_or_else(|e| {
+        for writer in &mut self.writers {
+            if let Err(e) = writer.flush() {
                 eprintln!("{e}");
-            });
-        });
+            }
+        }
         Ok(())
     }
 }
 
-fn main() {
+fn main() -> Result<()> {
     let cmd = Command::new("qtee")
         .arg(
             Arg::new("append")
@@ -70,50 +68,49 @@ fn main() {
         )
         .arg(Arg::new("paths").action(ArgAction::Append));
 
-    let args: Vec<String> = env::args().skip(1).collect();
-    let matches = cmd.get_matches_from(args);
-    let mut config = Config::from(&matches);
-    let paths = matches
+    let matches = cmd.get_matches();
+    let mut config = Config::from(&matches)?;
+    let paths: Vec<&Path> = matches
         .get_many::<String>("paths")
         .map(|v| v.map(Path::new).collect())
         .unwrap_or_default();
 
-    tee(paths, &mut config);
+    tee(&paths, &mut config);
+    Ok(())
 }
 
-fn tee(paths: Vec<&Path>, config: &mut Config) {
-    let mut writers: Vec<Box<dyn io::Write>> = paths
-        .into_iter()
+fn tee(paths: &[&Path], config: &mut Config) {
+    let mut writers: Vec<Box<dyn Write>> = paths
+        .iter()
         .filter_map(|p| {
-            let mut open_options = fs::OpenOptions::new();
-            open_options.create(true);
-            open_options.write(true);
-            if config.append {
-                open_options.append(true);
-            }
-            match open_options.open(p) {
-                Ok(handle) => Some(Box::new(handle) as Box<dyn io::Write>),
+            let result = if config.append {
+                File::options().create(true).append(true).open(p)
+            } else {
+                File::create(p)
+            };
+
+            match result {
+                Ok(file) => Some(Box::new(file) as Box<dyn Write>),
                 Err(e) => {
-                    eprintln!("Open error for {}: {e}", p.display());
+                    eprintln!("{}: {e}", p.display());
                     None
                 }
             }
         })
         .collect();
+
     writers.push(Box::new(io::stdout()));
 
     let mut tee_writers = TeeWriters { writers };
     if let Err(e) = io::copy(&mut config.input, &mut tee_writers) {
         eprintln!("{e}");
-    };
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::File;
     use std::io::Cursor;
-    use std::io::Write;
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 
@@ -129,11 +126,9 @@ mod tests {
             input: Box::new(buff),
         };
 
-        // Call tee with our test data
-        tee(vec![path], &mut config);
+        tee(&[path], &mut config);
 
-        // Verify file contents
-        let content = fs::read_to_string(path).unwrap();
+        let content = std::fs::read_to_string(path).unwrap();
         assert_eq!(content, test_data);
     }
 
@@ -146,22 +141,16 @@ mod tests {
         let path = temp_file.path();
 
         // Write initial content
-        {
-            let mut file = File::create(path).unwrap();
-            file.write_all(b"initial content\n").unwrap();
-        }
+        std::fs::write(path, b"initial content\n").unwrap();
 
-        // Test append mode
         let mut config = Config {
             append: true,
             input: Box::new(buff),
         };
 
-        // Call tee with append mode
-        tee(vec![path], &mut config);
+        tee(&[path], &mut config);
 
-        // Verify file contents (should contain initial content + new content)
-        let content = fs::read_to_string(path).unwrap();
+        let content = std::fs::read_to_string(path).unwrap();
         assert!(content.starts_with("initial content\n"));
         assert!(content.ends_with(&test_data));
     }
@@ -180,12 +169,10 @@ mod tests {
         let path1 = temp_file1.path();
         let path2 = temp_file2.path();
 
-        // Call tee with multiple files
-        tee(vec![path1, path2], &mut config);
+        tee(&[path1, path2], &mut config);
 
-        // Verify both files have the same content
-        let content1 = fs::read_to_string(path1).unwrap();
-        let content2 = fs::read_to_string(path2).unwrap();
+        let content1 = std::fs::read_to_string(path1).unwrap();
+        let content2 = std::fs::read_to_string(path2).unwrap();
 
         assert_eq!(content1, content2);
     }
@@ -203,10 +190,10 @@ mod tests {
         let valid_path = temp_file.path();
 
         // Should not panic when one path is invalid
-        tee(vec![&nonexistent_path, valid_path], &mut config);
+        tee(&[&nonexistent_path, valid_path], &mut config);
 
         // Valid file should still be written to
-        let content = fs::read_to_string(valid_path).unwrap();
+        let content = std::fs::read_to_string(valid_path).unwrap();
         assert!(!content.is_empty());
     }
 }

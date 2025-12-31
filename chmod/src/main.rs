@@ -1,11 +1,11 @@
 use std::fs;
-use std::io;
 use std::os::unix::fs::PermissionsExt;
 use std::path::Path;
 
+use anyhow::{bail, Context, Result};
 use clap::{Arg, ArgAction, Command};
 
-fn main() -> io::Result<()> {
+fn main() -> Result<()> {
     let cmd = Command::new("chmod")
         .about("Change file mode bits")
         .arg(
@@ -32,28 +32,23 @@ fn main() -> io::Result<()> {
     let mode_str = matches.get_one::<String>("mode").unwrap();
     let files: Vec<&String> = matches.get_many("files").unwrap().collect();
 
-    // Parse the mode - supporting only octal modes for simplicity
-    let mode = match parse_mode(mode_str) {
-        Ok(m) => m,
-        Err(e) => {
-            eprintln!("Error: {}", e);
-            return Ok(());
-        }
-    };
+    let mode = parse_mode(mode_str)?;
 
     for file in files {
         let path = Path::new(file);
         if recursive && path.is_dir() {
-            chmod_recursive(path, mode)?;
+            chmod_recursive(path, mode)
+                .with_context(|| format!("failed to chmod recursively '{}'", path.display()))?;
         } else {
-            chmod_file(path, mode)?;
+            chmod_file(path, mode)
+                .with_context(|| format!("failed to chmod '{}'", path.display()))?;
         }
     }
 
     Ok(())
 }
 
-fn parse_mode(mode_str: &str) -> Result<u32, String> {
+fn parse_mode(mode_str: &str) -> Result<u32> {
     // Check for symbolic mode format
     if mode_str.contains('+') || mode_str.contains('-') || mode_str.contains('=') {
         let current_mode = if mode_str.contains('=') { 0 } else { 0o666 };
@@ -79,7 +74,6 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
                 chars.next();
             }
 
-            // If no who specified, default to all
             // Default to all if no who specified
             if who == 0 {
                 who = 0o777;
@@ -88,8 +82,8 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
             // Parse operation (+, -, =)
             let operation = match chars.next() {
                 Some(c) if c == '+' || c == '-' || c == '=' => c,
-                Some(_) => return Err(format!("Invalid operation in symbolic mode: {}", mode_str)),
-                None => return Err(format!("Invalid symbolic mode format: {}", mode_str)),
+                Some(_) => bail!("invalid operation in symbolic mode: {}", mode_str),
+                None => bail!("invalid symbolic mode format: {}", mode_str),
             };
 
             // Parse permissions (r, w, x)
@@ -98,7 +92,7 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
                     'r' => permissions |= 0o444 & who,
                     'w' => permissions |= 0o222 & who,
                     'x' => permissions |= 0o111 & who,
-                    _ => return Err(format!("Invalid permission character: {}", c)),
+                    _ => bail!("invalid permission character: {}", c),
                 }
             }
 
@@ -118,25 +112,16 @@ fn parse_mode(mode_str: &str) -> Result<u32, String> {
     }
 
     // Handle octal mode
-    if mode_str.starts_with('0') {
-        if let Some(stripped) = &mode_str.strip_prefix('0') {
-            match u32::from_str_radix(stripped, 8) {
-                Ok(mode) => return Ok(mode),
-                Err(_) => return Err(format!("Invalid octal mode: {}", mode_str)),
-            }
-        }
+    if let Some(stripped) = mode_str.strip_prefix('0') {
+        return u32::from_str_radix(stripped, 8)
+            .with_context(|| format!("invalid octal mode: {}", mode_str));
     }
 
-    match u32::from_str_radix(mode_str, 8) {
-        Ok(mode) => Ok(mode),
-        Err(_) => Err(format!(
-            "Invalid mode: {}. This implementation only supports octal modes.",
-            mode_str
-        )),
-    }
+    u32::from_str_radix(mode_str, 8)
+        .with_context(|| format!("invalid mode: {}", mode_str))
 }
 
-fn chmod_file(path: &Path, mode: u32) -> io::Result<()> {
+fn chmod_file(path: &Path, mode: u32) -> Result<()> {
     let metadata = fs::metadata(path)?;
     let mut permissions = metadata.permissions();
     permissions.set_mode(mode);
@@ -144,12 +129,10 @@ fn chmod_file(path: &Path, mode: u32) -> io::Result<()> {
     Ok(())
 }
 
-fn chmod_recursive(dir: &Path, mode: u32) -> io::Result<()> {
-    // First change the permissions of the directory itself
+fn chmod_recursive(dir: &Path, mode: u32) -> Result<()> {
     chmod_file(dir, mode)?;
-    // Only process contents if it's a directory
+
     if dir.is_dir() {
-        // Recursively process directory contents
         for entry in fs::read_dir(dir)? {
             chmod_recursive(&entry?.path(), mode)?;
         }
@@ -162,7 +145,6 @@ mod tests {
     use super::*;
     use std::fs::File;
     use std::io::Write;
-    use std::os::unix::fs::PermissionsExt;
     use tempfile::tempdir;
 
     #[test]
@@ -184,20 +166,17 @@ mod tests {
     }
 
     #[test]
-    fn test_chmod_file() -> io::Result<()> {
+    fn test_chmod_file() -> Result<()> {
         let dir = tempdir()?;
         let file_path = dir.path().join("test-file.txt");
 
-        // Create a test file
         let mut file = File::create(&file_path)?;
         file.write_all(b"test content")?;
 
-        // Test chmod with octal mode
         chmod_file(&file_path, 0o644)?;
         let metadata = fs::metadata(&file_path)?;
         assert_eq!(metadata.permissions().mode() & 0o777, 0o644);
 
-        // Test chmod with another mode
         chmod_file(&file_path, 0o755)?;
         let metadata = fs::metadata(&file_path)?;
         assert_eq!(metadata.permissions().mode() & 0o777, 0o755);
@@ -206,37 +185,22 @@ mod tests {
     }
 
     #[test]
-    fn test_chmod_recursive() -> io::Result<()> {
+    fn test_chmod_recursive() -> Result<()> {
         let dir = tempdir()?;
         let subdir_path = dir.path().join("subdir");
         let file_path = dir.path().join("test-file.txt");
         let subfile_path = subdir_path.join("subfile.txt");
 
-        // Create directory structure
         fs::create_dir(&subdir_path)?;
         File::create(&file_path)?.write_all(b"test content")?;
         File::create(&subfile_path)?.write_all(b"test content")?;
 
-        // Test recursive chmod
         chmod_recursive(dir.path(), 0o755)?;
 
-        // Check permissions
-        assert_eq!(
-            fs::metadata(&dir.path())?.permissions().mode() & 0o777,
-            0o755
-        );
-        assert_eq!(
-            fs::metadata(&subdir_path)?.permissions().mode() & 0o777,
-            0o755
-        );
-        assert_eq!(
-            fs::metadata(&file_path)?.permissions().mode() & 0o777,
-            0o755
-        );
-        assert_eq!(
-            fs::metadata(&subfile_path)?.permissions().mode() & 0o777,
-            0o755
-        );
+        assert_eq!(fs::metadata(dir.path())?.permissions().mode() & 0o777, 0o755);
+        assert_eq!(fs::metadata(&subdir_path)?.permissions().mode() & 0o777, 0o755);
+        assert_eq!(fs::metadata(&file_path)?.permissions().mode() & 0o777, 0o755);
+        assert_eq!(fs::metadata(&subfile_path)?.permissions().mode() & 0o777, 0o755);
 
         Ok(())
     }

@@ -10,5 +10,6 @@ name = "qchmod"
 path = "src/main.rs"
 
 [dependencies]
+anyhow = "1.0.75"
 clap = { version = "4.2.0" }
 tempfile = "3.8.0"
