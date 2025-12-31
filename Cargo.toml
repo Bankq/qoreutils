@@ -1,8 +1,9 @@
 [workspace]
 resolver = "2"
 members = [
-         "ls",
-         "tee",
          "base64",
          "chmod",
+         "ls",
+         "tee",
+         "wc",
 ]

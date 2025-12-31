@@ -1,0 +1,12 @@
+[package]
+name = "qoreutils-wc"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "qwc"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0.75"
+clap = "4.2.0"
