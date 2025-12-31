@@ -23,40 +23,40 @@ struct Config {
 }
 
 impl Config {
-    pub fn from(options: &ArgMatches) -> Self {
-        Self {
+    pub fn from(options: &ArgMatches) -> Result<Self, String> {
+        let input = match options.get_one::<String>("input") {
+            Some(path) => match fs::OpenOptions::new().read(true).open(path) {
+                Ok(handle) => Box::new(handle) as Box<dyn io::Read>,
+                Err(e) => return Err(e.to_string()),
+            },
+            None => Box::new(io::stdin()) as Box<dyn io::Read>,
+        };
+
+        let output = match options.get_one::<String>("output") {
+            Some(path) => match fs::OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(path)
+            {
+                Ok(handle) => Box::new(handle) as Box<dyn io::Write>,
+                Err(e) => return Err(e.to_string()),
+            },
+            None => Box::new(io::stdout()) as Box<dyn io::Write>,
+        };
+
+        Ok(Self {
             mode: match options.get_flag("decode") {
                 true => Mode::Decode,
                 false => Mode::Encode,
             },
-            input: match options.get_one::<String>("input") {
-                Some(path) => match fs::OpenOptions::new().read(true).open(path) {
-                    Ok(handle) => Box::new(handle) as Box<dyn io::Read>,
-                    Err(e) => {
-                        panic!("{path}:{e}")
-                    }
-                },
-                None => Box::new(io::stdin()) as Box<dyn io::Read>,
-            },
-            output: match options.get_one::<String>("output") {
-                Some(path) => match fs::OpenOptions::new()
-                    .create(true)
-                    .write(true)
-                    .truncate(true)
-                    .open(path)
-                {
-                    Ok(handle) => Box::new(handle) as Box<dyn io::Write>,
-                    Err(e) => {
-                        panic!("{path}:{e}")
-                    }
-                },
-                None => Box::new(io::stdout()) as Box<dyn io::Write>,
-            },
-        }
+            input,
+            output,
+        })
     }
 }
 
-fn main() {
+fn main() -> Result<(), String> {
     let matches = Command::new("base64")
         .arg(
             Arg::new("decode")
@@ -69,15 +69,21 @@ fn main() {
         .arg(Arg::new("input").short('i').long("input"))
         .arg(Arg::new("output").short('o').long("output"))
         .get_matches();
-    let mut config = Config::from(&matches);
+    let mut config = Config::from(&matches).map_err(|e| e.to_string())?;
     let mut input = Vec::new();
-    config.input.read_to_end(&mut input).unwrap();
+    config
+        .input
+        .read_to_end(&mut input)
+        .map_err(|e| e.to_string())?;
     let output = match config.mode {
         Mode::Encode => encode(&input),
         Mode::Decode => decode(&input),
-    }
-    .unwrap();
-    config.output.write_all(&output).unwrap();
+    }?;
+    config
+        .output
+        .write_all(&output)
+        .map_err(|e| e.to_string())?;
+    Ok(())
 }
 
 fn decode(input: &[u8]) -> Result<Vec<u8>, &'static str> {
