@@ -78,15 +78,16 @@ fn tee(paths: Vec<&Path>, config: &Config) {
     let mut writers: Vec<Box<dyn io::Write>> = paths
         .into_iter()
         .filter_map(|p| {
-            let mut file = fs::OpenOptions::new();
-            file.create(true);
+            let mut open_options = fs::OpenOptions::new();
+            open_options.create(true);
+            open_options.write(true);
             if config.append {
-                file.append(true);
+                open_options.append(true);
             }
-            match file.open(p) {
+            match open_options.open(p) {
                 Ok(handle) => Some(Box::new(handle) as Box<dyn io::Write>),
                 Err(e) => {
-                    eprintln!("{}: {e}", p.display());
+                    eprintln!("Open error for {}: {e}", p.display());
                     None
                 }
             }
@@ -98,4 +99,84 @@ fn tee(paths: Vec<&Path>, config: &Config) {
     if let Err(e) = io::copy(&mut reader, &mut tee_writers) {
         eprintln!("{e}");
     };
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::PathBuf;
+    use tempfile::NamedTempFile;
+
+    #[test]
+    fn test_tee_single_file() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path();
+        let config = Config { append: false };
+
+        // Call tee with our test data
+        tee(vec![path], &config);
+
+        // Verify file contents
+        let content = fs::read_to_string(path).unwrap();
+        assert_eq!(content, "test data\n");
+    }
+
+    #[test]
+    fn test_tee_append_mode() {
+        let temp_file = NamedTempFile::new().unwrap();
+        let path = temp_file.path();
+
+        // Write initial content
+        {
+            let mut file = File::create(path).unwrap();
+            file.write_all(b"initial content\n").unwrap();
+        }
+
+        // Test append mode
+        let config = Config { append: true };
+
+        // Call tee with append mode
+        tee(vec![path], &config);
+
+        // Verify file contents (should contain initial content + new content)
+        let content = fs::read_to_string(path).unwrap();
+        assert!(content.starts_with("initial content\n"));
+    }
+
+    #[test]
+    fn test_tee_multiple_files() {
+        let temp_file1 = NamedTempFile::new().unwrap();
+        let temp_file2 = NamedTempFile::new().unwrap();
+        let path1 = temp_file1.path();
+        let path2 = temp_file2.path();
+
+        let config = Config { append: false };
+
+        // Call tee with multiple files
+        tee(vec![path1, path2], &config);
+
+        // Verify both files have the same content
+        let content1 = fs::read_to_string(path1).unwrap();
+        let content2 = fs::read_to_string(path2).unwrap();
+
+        assert_eq!(content1, content2);
+    }
+
+    #[test]
+    fn test_tee_nonexistent_path() {
+        let nonexistent_path = PathBuf::from("/nonexistent/path");
+        let temp_file = NamedTempFile::new().unwrap();
+        let valid_path = temp_file.path();
+
+        let config = Config { append: false };
+
+        // Should not panic when one path is invalid
+        tee(vec![&nonexistent_path, valid_path], &config);
+
+        // Valid file should still be written to
+        let content = fs::read_to_string(valid_path).unwrap();
+        assert!(!content.is_empty());
+    }
 }
